@@ -1,131 +1,449 @@
 global:
-  # EULA https://techdocs.broadcom.com/us/en/symantec-security-software/identity-security/siteminder/12-8/end-user-license-agreement-eula.html 
-  # acceptLicenseAgreement must be "YES" to proceed with Access Gateway deployment.
-  acceptLicenseAgreement: "YES"
+                                     #*********************************#
+  ###******************************* #      Mandatory Parameters       #*********************************###
+                                     #*********************************#
 
-  fullnameOverride: "casso"
+  fullname: casso
+  # EULA https://techdocs.broadcom.com/us/en/symantec-security-software/identity-security/siteminder/12-8/end-user-license-agreement-eula.html 
+  # acceptLicenseAgreement must be "YES" to proceed with Policy Server deployment.
+  acceptLicenseAgreement: "YES"
 
   # ServiceAccount is applicable for AWS Pod Native support
   existingServiceAccount: ""
   securityContext:
     runAsUser: 65534
     runAsGroup: 65534
-    fsGroup: 1337
-  restartPolicy: Always
-
-  podTerminateGracePeriod: 60
-
-  dnsPolicy: ClusterFirst
-
-  terminationMessagePath: /dev/termination-log
-
-  imagePullPolicy: Always
-
-  # The masterKeySeed value is used for encrypting all the secrets. Enter a value in the Base64 encoded format. #
-  keySeed: "ZmlyZXdhbGw="
-
+    fsGroup: 1337                
   # Docker image repository details #
   registry:
-    url: "https://siteminder.packages.broadcom.com/"
+    url: https://siteminder.packages.broadcom.com/
     existingSecrets: []
     credentials:
       username:
       password:
 
-images:
+  # The masterKeySeed value is used for encrypting all secrets. Enter a value in Base64 encoded format.
+  masterKeySeed: "ZmlyZXdhbGw="
+
+  # FIPS mode of Policy Server can be "COMPAT" or "ONLY".
+  fipsMode: "COMPAT"
+
+  # Enter the password of the default Superuser "siteminder".
+  superuserPassword: ""
+  encryptionKey: ""
+
+  # To enable native driver usage for connecting to ODBC stores. Default behaviour uses DataDirect
+  odbcNativeDriver:
+    enabled: false
+
+  policyStore:
+    # Provide IP address/Hostname for policy store along with port number. Syntax: policystorehost:port.
+    #Example: policystorehost.domain.com:389
+    # To enable failover support of odbc policy stores, enter comma-separated mutliple entries of DSN names.
+    #Example: POLICYSTORE_DSN1,POLICYSTORE_DSN2,POLICYSTORE_DSN3, etc
+    # To enable failover support of ldap policy stores, enter comma-separated multiple entries of hostnames and port numbers.
+    #Example: host1:port1,host2:port2,host3:port3, etc
+    # Policy store type is either ldap or odbc
+    service: "POLICYSTORE_HOST:PORT"
+    userPassword: ""
+    type: "odbc"
+    odbc:
+      # This section is for odbc policy store type. The supported odbc policy store types are "oracle", "mssql" and "mysql".
+      # If odbc type is "mysql" or "mssql", provide valid databasename, DSN, and username.
+      # If odbc type is "oracle", provide servicename.
+      type: "mysql"
+      databaseName: "POLICYSTORE_DATABASENAME"
+      DSN: "POLICYSTORE_DSN"
+      user: "POLICYSTORE_USER"
+      oracle:
+        databaseServiceName: "POLICYSTORE_ORACLE_SERVICE"
+
+      # To enable SSL in odbc policy store, set "enabled" to "true".
+      ssl:
+        enabled: false
+        # If SSL is enabled in odbc policy store, set "trustStore" and "trustPassword". "hostNameInCertificate" is optional.
+        trustStore: ""
+        hostNameInCertificate: ""
+        trustPassword: ""
+    ldap:
+      # This section is for ldap policy store type. The ldap type can be "cadir" or "ADLDS".
+      type: "cadir"
+      rootDN: "POLICYSTORE_ROOTDN"
+      userDN: "POLICYSTORE_USERDN"
+      # To enable SSL in ldap policy store, set "enabled" to "true".
+      ssl:
+        enabled: false
+
+
+  ###****************************************************************************************************###
+
+  imagePullPolicy: Always
+  dnsPolicy: ClusterFirst
+  restartPolicy: Always
+  terminationMessagePath: /dev/termination-log
+
+  policyServerParams:
+    # Health probe settings for Policy Server.
+    healthProbe:
+      port: 8181
+      trustedHost: "healthprobe"
+      intervalSeconds: 10
+      # If Policy Server health probe connection mode is HTTPS.
+      connectMode: "HTTP"
+      keyStoreFileName: "psprobekeystore.jks"
+      keyStorePassword: ""
+    startupProbe:
+      periodSeconds: 10
+      failureThreshold: 30
+    livenessProbe:
+      initialDelaySeconds: 10
+      timeoutSeconds: 10
+      periodSeconds: 10
+      failureThreshold: 3
+    readinessProbe:
+      initialDelaySeconds: 15
+      timeoutSeconds: 10
+      periodSeconds: 10
+      failureThreshold: 2
+
+    certUtil:
+      trustAttributes:
+         rootCA : "C,," 
+         server : "P,,"  
+    # To enable Policy Server trace logging, set "enabled" to "true".
+    # Custom smtracedefault.txt can be provided using Config retriever.
+    smTrace:
+      enabled: false
+
+    # To enable OneView Monitor support, set "enabled" to "true".
+    # Administrative Server listens on 44449 port to monitor requests.
+    # Enter "guiPort" to access GUI on NodePort, "port" is the service port.
+    # serviceToConnect defines the OneView Monitor service name for components to register in the <ovmServiceName>.<namespace>.svc.cluster.local,44449 format.
+    ovm: 
+      enabled: false
+      serviceToConnect:  casso-siteminder-ovm-admin.cassoserver.svc.cluster.local,44449
+
+    # To start Policy Server monitoring, set "startPSMon" to "true".
+    startPSMon: "false"
+
+    # If autoscaling is enabled, set value for 'agentConnectionMaxLifetime' in minutes.
+    # Default value is '0' which means 6 hrs. Minimum value in 15 minutes.
+    agentConnectionMaxLifetime: 0
+
+    # admin Service type can be "ClusterIP", "NodePort".
+    admin:
+      service:
+        type: ClusterIP
+
+    # Service type can be "ClusterIP", "NodePort"  or "LoadBalancer".
+    service:
+      type: NodePort
+      # Some cloud services may support custom Kubernetes annotations for optimizing load-balancing behavior.
+      # Ensure that each annotation line in the values field ends with a comma, including the last one defined.
+      # Example for AWS -
+      # values: {service.beta.kubernetes.io/aws-load-balancer-internal: "true",service.beta.kubernetes.io/aws-load-balancer-access-log-enabled: "true", }
+      annotations:
+        enabled: false
+        values: {} 
+
+    # Set enableSymantecIGAIntegration to true to enable the integration with Symantec IGA.
+    enableSymantecIGAIntegration: false
+
+    # To enable in-memory tracing in Policy Server, set "enabled" to "true".
+    # The output file is stored in the location specified for storing core dumps in "corePath".
+    # Custom settings can be provided using Config retriever on the path "/opt/CA/siteminder/config/sminmemorytracedefault.txt".
+    inMemoryTrace: 
+      enabled: false
+      size: 100
+
+    secrets:
+       # Set this parameter to import data from an existing policy store encrypted with password. The importPassphrase must be the same as the phrase specified during xpsexport."
+       importPassphrase: ""
+       # If SSL is enabled in ldap policy store, specify the password to encrypt the certificate database key.
+       ldapSSLNSSDBPassword: ""
+
+    
+  # Path to core dumps.
+  corePath: /tmp/core/
+  troubleshootingData:
+    enabled: false
+    storageType: "awsS3"
+    # Follwing is the example archiveFiles list
+    #archiveFiles:
+    #- "/opt/CA/siteminder/db/system_odbc.ini"
+    #- "/opt/CA/siteminder/config/JVMOptions.txt"
+    archiveFiles: []
+    aws:
+      bucketName: ""
+      region: ""
+      keyID: ""
+      accessKey: ""                 
+    azure:
+      fileEndpoint: ""
+      fileShareName: ""
+      directoryPath: ""
+      sasToken: ""
+
+  # Config retriever details #
   configuration:
-    repository: "siteminder.packages.broadcom.com/casso"
-    image: "config-retriever"
+    repository: siteminder.packages.broadcom.com/casso
+    image: config-retriever
     tag: 12.8.0801.3037
 
-  runtime:
-    configuration:
-      repository: "siteminder.packages.broadcom.com/casso"
-      image: "runtime-config-retriever"
-      tag: 12.8.0801.3037
-
-  metricsExporter:
-    repository: "siteminder.packages.broadcom.com/casso"
-    image: "agmetricsexporter"
-    tag: 12.8.0801.3037
-
-  accessGateway:
-    repository: "siteminder.packages.broadcom.com/casso"
-    image: "access-gateway"
-    tag: 12.8.0801.3037
-
-sso:
-# This section contains information required for Access Gateway to register with Policy Server.
-# If Policy Server is within the cluster, service field should be "<policy-server-service-name>.<policy-server-namespace>.svc.cluster.local".
-# If Policy Server is in a different cluster exposed using a NodePort, service field should be "<hostname-of- master-node-of-policy-server-cluster>:<NodePort-mapped-to-policy-server-service-account-port>".
-# If Policy Server is in a different cluster behind a load balancer, service field should be "<hostname-of- master-node-of-policy-server-cluster>:<load-balancer-port-mapped-to-policy-server-service-account-port>".
-# In EKS/AKS, service field should be "<exposed-IP-of-load-balancer-in-front-of-policy-server>:<exposed-load-balancer-port>".
-# policyServer.fipsMode specifies the FIPS mode of Policy Server.
-  policyServer:
-    service: ""
-    fipsMode: "COMPAT"
-
-# Config retriever's source configuration #
-  configuration:
     enabled: false
     type: "local"
-    source: "/tmp/democonfiguration/accessgateway"
     aws:
-      creds: "awscreds"
-      keyID: ""
-      accessKey: ""                                                                                                  
       region: ""
+      keyID: ""
+      accessKey: ""
+
     git:
-      creds: "gitcreds"
       username: ""
       accessToken: ""
-      folderPath: ""
 
     resources:
       requests:
         cpu: 100m
-        memory: 100Mi
+        memory: 200Mi
       #limits:
       #  cpu:
       #  memory:
-# Runtime config retriever's source configuration #
-  runtime:
-    configuration:
+  # Runtime config retriever details #
+  runtimeConfiguration:
+    repository: siteminder.packages.broadcom.com/casso
+    image: runtime-config-retriever
+    tag: 12.8.0801.3037
+
+    resources:
+      requests:
+        cpu: 100m
+        memory: 200Mi
+      #limits:
+      #  cpu:
+      #  memory:
+
+    intervalSeconds: "300"
+    type: ""
+
+    aws:
+      region: ""
+      keyID: ""
+      accessKey: ""
+
+    git:
+      username: ""
+      accessToken: ""
+
+  stores:
+    keyStore:
+      # If "embedded" is set to "NO", specify an external key store. Else, the policy store will be used as key store.
+      # Provide IP address/hostname along with port number for key store in the keystorehost:port format. Example: keystorehost.domain.com:389
+      # Optional: To enable failover support of odbc key store, enter comma-separated multiple DSNs.
+      #           Example: KEYSTORE_DSN1,KEYSTORE_DSN2,KEYSTORE_DSN3, KEYSTORE_DSNn
+      # Optional: To enable failover support of ldap key store, enter comma-separated multiple hostnames and port numbers.
+      #           Example: host1:port1,host2:port2,host3:port3, hostn:portn
+      embedded: "YES"
+      service: "KEYSTORE_HOST:PORT"
+      userPassword: ""
+      encryptionKey: ""
+      type: "odbc"
+      odbc: 
+        # The supported odbc key store types are "oracle", "mssql" and "mysql".
+        # If odbc type is "mysql" or "mssql", provide valid databasename, DSN, and username.
+        # If odbc type is "oracle", provide servicename, DSN, and username.
+        type: "mysql"
+        databaseName: "KEYSTORE_DATABASE"
+        DSN: "KEYSTORE_DSN"
+        user: "KEYSTORE_USER"
+        oracle:
+          databaseServiceName: "KEYSTORE_ORACLE_SERVICE"
+        ssl:
+          # To enable SSL in odbc key store, set "enabled" to "true".
+          enabled: false
+          # If SSL is enabled in odbc key store, set "trustStore" and "trustPassword". "hostNameInCertificate" is optional.
+          trustStore: ""
+          hostNameInCertificate: ""
+          trustPassword: ""
+      ldap:
+        # The ldap type can be "cadir" or "AD".
+        type: "cadir"
+        rootDN: "KEYSTORE_ROOTDN"
+        userDN: "KEYSTORE_USERDN"
+        ssl:
+          # To enable SSL in ldap key store, set "enabled" to "true".
+          enabled: false
+
+    auditStore:
+        # Set "enabled" to enable audit store. The supported audit store types are "odbc" and "text".
       enabled: false
-      interval: 600
-      type: "git"
-      source: ""
-      aws:
-        creds: "runtimeawscreds"
-        keyID: ""
-        accessKey: ""
-        region: ""
-      git:
-        creds: "runtimegitcreds"
-        username: ""
-        accessToken: ""
-        folderPath: ""
+      type: "text"
+      odbc:
+        # The supported odbc audit store types are "oracle", "mssql" and "mysql".
+        # Provide IP address/hostname along with port number for audit store in the auditstorehost:port format. Example: auditstorehost.domain.com:389
+        # Optional: To enable failover support of ODBC audit store, enter comma-separated multiple DSNs.
+        #           Example: AUDITSTORE_DSN1,AUDITSTORE _DSN2,AUDITSTORE _DSN3,AUDITSTORE _DSNn 
+        # Optional: To enable failover support of LDAP audit store, enter comma-separated multiple hostnames and port numbers.
+        #           Example: host1:port1,host2:port2,host3:port3, hostn:portn
+        # If odbc type is "mysql" or "mssql", provide valid databasename, DSN, and username.
+        # If odbc type is "oracle", provide servicename, DSN, and username.
+        DSN: "AUDITSTORE_DSN"
+        user: "AUDITSTORE_USER"
+        userPassword: ""
+        type: "mysql"
+        service: "AUDITSTORE_HOST:PORT"
+        databaseName: "AUDITSTORE_DATABASENAME"
+        oracle:
+          databaseServiceName: "AUDITSTORE_ORACLE_SERVICE"
+        ssl:
+          # To enable SSL in odbc audit store, set "enabled" to "true".
+          enabled: false
+          # If SSL is enabled in odbc audit store, set "trustStore" and "trustPassword". "hostNameInCertificate" is optional.
+          trustStore: ""
+          hostNameInCertificate: ""
+          trustPassword: ""
 
-    resources:
-      requests:
-        cpu: 100m
-        memory: 100Mi
-      #limits:
-      #  cpu:
-      #  memory:
+      # By default, the audit store type is 'text'.
+      # auditUserActivity audits user activity. Possible options: "YES" or "NO".
+      # auditAdminStoreActivity audits administrator activity in policy store. Possible values: "YES" or "NO".
+      # adminActivity defines the type of events logged for administrator activity. Possible values: 0 - No Events, 1 - allEvents, 2 - Rejection Only.
+      # enableAuthAuditing defines type of authentication activities logged: Possible values:: 0 - No Events, 1 - allEvents, 2 - Rejection Only.
+      # enableAzAuditing defines type of authorization activities logged. Possible values: 0 - No Events, 1 - allEvents, 2 - Rejection Only.
+      # anonAuthAuditing enables anonymous authentication auditing. Possible values: "YES"or "NO".
+      # anonAzAuditing enables anonymous authorization auditing. Possible values: "YES"or "NO".
+      # affiliateAuditing enables affiliate auditing. Possible values: 0 - No Events, 1 - allEvents, 2 - Rejection Only.
+      auditUserActivity: "YES"
+      auditAdminStoreActivity: "NO"
+      adminActivity: 1
+      enableAuthAuditing: 1
+      enableAzAuditing: 1
+      anonAuthAuditing: "NO"
+      anonAzAuditing: "NO"
+      affiliateAuditing: 0
 
-# Metrics exporter configuration #
+    sessionStore:
+      # Set "enabled" to true for enabling session store.
+      enabled: false
+      # Provide IP address/hostname along with port number for session store in the sessionstorehost:port format. Example: sessionstorehost.domain.com:389
+      # Session store type is either "ldap" or "odbc".
+      # Optional: To enable failover support of odbc session store, enter comma-separated multiple DSNs.
+      #           Example: SESSIONSTORE_DSN1, SESSIONSTORE_DSN2, SESSIONSTORE_DSN3, SESSIONSTORE_DSNn
+      # Optional: To enable failover support of ldap session store, enter comma-separated multiple hostnames and port numbers.
+      #           Example: host1:port1,host2:port2,host3:port3, hostn:portn
+      service: "SESSIONSTORE_HOST:PORT"
+      userPassword: ""
+      type: "odbc"
+      odbc:
+        # The supported odbc session store types are "oracle", "mssql" and "mysql".
+        # If odbc type is "mysql" or "mssql", provide valid databasename, DSN, and username.
+        # If odbc type is "oracle", provide servicename, DSN, and username.
+        DSN: "SESSIONSTORE_DSN"
+        type: "mysql"
+        databaseName: "SESSIONSTORE_DATABASE"
+        user: "SESSIONSTORE_USER"
+        oracle:
+          databaseServiceName: "SESSIONSTORE_ORACLE_SERVICE"
+        ssl:
+          # To enable SSL in odbc session store, set "enabled" to "true".
+          enabled: false
+          # If SSL is enable in odbc session store, set "trustStore" and "trustPassword". "hostNameInCertificate" is optional.
+          trustStore: ""
+          hostNameInCertificate: ""
+          trustPassword: ""
+
+      ldap:
+        # The ldap type can be "cadir".
+        rootDN: "SESSIONSTORE_ROOTDN"
+        userDN: "SESSIONSTORE_USERDN"
+        # To enable SSL in ldap session store, set "enabled" to "true".
+        ssl:
+          enabled: false
+
+policyServer:
+  # Set this parameter to "true" to deploy Policy Server.
+  enabled: false
+
+  replicas: 1
+  pdb:
+    minAvailable: 1      
+  
+  annotations:
+    values: {prometheus.io/scrape: 'true', prometheus.io/port: '8088', prometheus.io/path: '/metricsexporter/resources/metrics'}
+  
+  # For Rolling Update, set these two parameters to fine tune the update process. by default value is (25% of replica set)
+  # When specified as an integer, it represents the actual number of pods; when specifying a percentage, that percentage of the desired number of pods is used, rounded down
+  rollingUpdate:
+    maxSurge: 1
+    maxUnavailable: 25%
+  
+  # Host entries that should be added in the etc/hosts file. Add any host that is not DNS resolvable with its name.
+  hostAliases:
+  - ip: "192.168.1.10"
+    hostnames:
+    - "example.com"
+    - "www.example.com"
+
+  # Policy Server image repository details.
+  repository: siteminder.packages.broadcom.com/casso
+  image: policy-server
+  tag: 12.8.0801.3037
+
+  resources:
+    requests:
+      cpu: 1000m
+      memory: 500Mi
+    #limits:
+    #  cpu:
+    #  memory:
+
+  initializationTimeout: 120
+
+  podTerminateGracePeriod: 60
+
+  # To work with SecurID authentication schemes in policy server, set "enabled" to "YES".
+  # If you set to "YES", generate the ACE configuration information file (sdconf.rec, failover.dat)
+  # on RSA Authentication Manager by an RSA Administrator and then place it in the
+  # overlay/lib directory of config-retriever path to copy to the <policy_server_installation_path>/lib directory of the Policy Server container.
+  rsaSecureId:
+    enabled: false
+    nodeSecretEncryptionPassword: ""
+
+  serviceNodePort:
+    psHealthProbe: 31333
+
+  # Set to true to enable Advanced Password Services in Policy Server.
+  aps:
+    enabled: false
+
+  # Set to true to enable integration with Symantec Advanced Authentication.
+  enableSymantecAdvancedAuthenticationIntegration: false
+
+  # Set to true to enable Policy Server as Radius Server.
+  enableRadiusServer: false
+
+  # Config retriever details for Policy Server#
+  configuration:
+    source: "/tmp/democonfiguration/policyserver"
+    gitFolderPath: "/policyserver"
+  runtimeConfiguration:
+    enabled: false 
+    source: ""
+    runtimeGitFolderPath: "/policyserver"
+
+  # Autoscaling details of Policy Server.
+  autoscaling:
+    enabled: false
+    # type can be "cpu" or "custom" or "both".
+    type: "both"
+    replicasMin: 1
+    replicasMax: 10
+    cpuUtilization: 70
+    averageRequestQueueInUse: 15
+
   metricsExporter:
-    livenessProbe:
-      initialDelaySeconds: 40
-      timeoutSeconds: 10
-      periodSeconds: 10
-      failureThreshold: 5
-    readinessProbe:
-      initialDelaySeconds: 30
-      periodSeconds: 10
-      timeoutSeconds: 10
-      failureThreshold: 5
+    enabled: false
+
+    serviceMonitor:
+      enabled: true
     resources:
       requests:
         cpu: 200m
@@ -133,186 +451,167 @@ sso:
       #limits:
       #  cpu:
       #  memory:
+    
+    repository: siteminder.packages.broadcom.com/casso
+    image: metricsexporter
+    tag: 12.8.0801.3037
 
-  accessGateway:
-# Set number of AG POD replicas, default is 1.
-    replicas: 1
-
-    pdb:
-      minAvailable: 1       
-    annotations:
-      values: {prometheus.io/scrape: 'true', prometheus.io/port: '9090', prometheus.io/path: '/metrics/'}
-    # For Rolling Update, set these two parameters to fine tune the update process. by default value is (25% of replica set)
-    # When specified as an integer, it represents the actual number of pods; when specifying a percentage, that percentage of the desired number of pods is used, rounded down
-    rollingUpdate:
-      maxSurge: 1
-      maxUnavailable: 25%
-# Host entries that should be added in the etc/hosts file. Add any host that is not DNS resolvable with its name.
-    hostAliases:
-    - ip: "192.168.1.10"
-      hostnames:
-      - "example.com"
-      - "www.example.com"
-
-# Access Gateway liveness/readiness probe details #
     livenessProbe:
-      initialDelaySeconds: 40
+      initialDelaySeconds: 180
+      timeoutSeconds: 5
       periodSeconds: 10
-      timeoutSeconds: 10
-      failureThreshold: 5
+      failureThreshold: 5      
     readinessProbe:
-      initialDelaySeconds: 60
-      periodSeconds: 10
+      initialDelaySeconds: 30
+      periodSeconds: 5
       timeoutSeconds: 10
       failureThreshold: 5
 
-# Server name entry in the httpd.conf file and httpd-ssl.conf file.
-    publicHostname: "sps.ca.com"
-    trustedHost: ""
-    enableSharedRollover: false
-    aco: ""
-    hco: ""
+admin:
 
-# Path to core dumps.
-    corePath: /tmp/corefiles/cores/
-    troubleshootingData:
+  # Set true to deploy Administrative Policy Server.
+  enabled: false
+
+  replicas: 1
+
+  pdb:
+    minAvailable: 1                   
+  # Host entries that should be added in the etc/hosts file. Add any host that is not DNS resolvable with its name.
+  hostAliases:
+  - ip: "192.168.1.10"
+    hostnames:
+    - "example.com"
+    - "www.example.com"
+
+  policyServer:
+
+    repository: siteminder.packages.broadcom.com/casso
+    image: policy-server
+    tag: 12.8.0801.3037
+    
+    resources:
+      requests:
+        cpu: 500m
+        memory: 500Mi
+      #limits:
+      #  cpu:
+      #  memory:
+
+    # Set to "YES" to upgrade XPS Schema in policy store with latest version.
+    xpsSchemaUpgrade: "NO"
+
+    # To change the status of XPS configurations parameters with the scope "global" and type "logical", set enable to true"
+    # The status update happens only in admin-pod-0 at startup
+    # Add parameters to be enabled in enableConfigParams and parameters to be disabled in disableConfigParams
+    # You can enter comma-separated multiple values.
+    updateXpsConfigParams:
       enabled: false
-      # storageType value could be "awsS3" or "azureFileShares"
-      storageType: "awsS3"
-      # Follwing is the example archiveFiles list
-      #archiveFiles:
-      #- "/opt/CA/secure-proxy/proxy-engine/conf/proxyrules.xml"
-      #- "/opt/CA/secure-proxy/proxy-engine/conf/server.conf"
-      archiveFiles: []
-      creds: "troubleshootdatacreds"
-      aws:
-        bucketName: ""
-        region: ""
-        keyID: ""
-        accessKey: ""
-      azure:
-        fileEndpoint: ""
-        fileShareName: ""
-        directoryPath: ""
-        sasToken: ""
+      enableConfigParams: ""
+      disableConfigParams: ""
 
-# List of virtual hostnames that can be used to access Access Gateway.
-    virtualHostnames: "sps.ca.com"
-
-# Set enableAgent to true for Agent functionality.
-    enableAgent : true
-    agentTrace:
+    # Set true to import default CA certificates.
+    importDefaultCACertificates:
       enabled: false
 
-# Apache configuration #
-    apache:
-      adminEmail: ""
-      trace: false
-
-# Access Gateway SSL Configuration #
-# apache.ssl.enabled is to either enable or disable SSL communication to Access Gateway.
-# apache.ssl.certFile specifies the Apache public certificate, placed in <config-retriever-root-folder>/accessgateway/access-gateway/overlay/SSL/certs/.
-# apache.ssl.keyFile specifies the Apache private key, placed in <config-retriever-root-folder>/accessgateway/access-gateway/overlay/SSL/keys/.
-# apache.ssl.caFile contains the name of CA certs bundle, placed in <config-retriever-root-folder>/accessgateway/access-gateway/overlay/SSL/certs/.
-# apache.ssl.verifyType specifies the Client authentication type.
-# apache.ssl.verifyDepth specifies the depth to verify the certificate issuer chain before deciding that a certificate is invalid.
-# apache.ssl.keyPwd specifies password of Apache certificate key file.
-      ssl:
-        enabled: false
-        useIngressTlsSecret: false
-        certFile: ""
-        keyFile: ""
-        caFile: ""
-        verifyType: ""
-        verifyDepth:
-        creds: "apachesslcreds"
-        keyPwd: ""
-# noodle.ssl.enabled is to enable HTTPS communication with backend servers.
-# noodle.ssl.clientKey specifies the private key filename of the noodle client certificate, placed in <config-retriever-root-folder>/accessgateway/access-gateway/overlay/SSL/clientcert/key/.
-# The corresponding client certificate has to be placed in <config-retriever-root-folder>/accessgateway/access-gateway/overlay/SSL/clientcert/certs/.
-# noodle.ssl.clientPassphrase specifies the passphrase for client certificate.
-    noodle:
-      ssl:
-        enabled: false
-        clientKey: ""
-        creds: "noodlesslcreds"
-        clientPassphrase: ""
-
-    # Service type can be "ClusterIP", "NodePort".
-    service:
-      type: "NodePort"
-
-# Ingress configuration #
-    ingress:
-      className: "nginx"
-      enableSSLPassThrough: false
-      sessionAffinityEnabled: false
-      virtualHostname: "sps.ca.com"
-      tlsSecret: "access-gateway-vhostname-tls"
-      tlsCrt: "LS0tLS1CRUdJTiBDRVJUSUZJQ0FURS0tLS0tDQpNSUlIUlRDQ0JTMmdBd0lCQWdJVExBQUFBdmNoZEZUU2RHWUJPQUFBQUFBQzl6QU5CZ2txaGtpRzl3MEJBUXNGDQpBREIvTVFzd0NRWURWUVFHRXdKSlRqRVNNQkFHQTFVRUNCTUpWR1ZzWVc1bllXNWhNUkl3RUFZRFZRUUhFd2xJDQplV1JsY21GaVlXUXhEREFLQmdOVkJBc1RBMU5DVlRFTU1Bb0dBMVVFQ3hNRFJWTkVNUll3RkFZRFZRUUtFdzFDDQpjbTloWkdOdmJTQkpibU11TVJRd0VnWURWUVFERXd0Q2NHTlFjbUZ0YjJSRFFUQWVGdzB5TWpBeE1EY3dOVFF3DQpNVEJhRncweU16QXhNRGN3TlRVd01UQmFNR1V4Q3pBSkJnTlZCQVlUQWtsT01Rc3dDUVlEVlFRSUV3SlVVekVTDQpNQkFHQTFVRUJ4TUpTSGxrWlhKaFltRmtNUkV3RHdZRFZRUUtFd2hDY205aFpHTnZiVEVOTUFzR0ExVUVDeE1FDQpRMU5DVlRFVE1CRUdBMVVFQXhNS2MzQnpMbU5oTG1OdmJUQ0NBU0l3RFFZSktvWklodmNOQVFFQkJRQURnZ0VQDQpBRENDQVFvQ2dnRUJBTzN2U3VSWWpOZWZGMjhwYUFBcVNpTmRSMGx6ZkV3T2VhbnFBR2lGbFdaMUdqOGg5N1VaDQo3V05DOEMxVEUzbmIvTS9MbjhsK3owQ1JEa2lGdVRCaUxrMGJGOEZRMzF5by9tRkdIejJhSHNwb1hncDZKWm01DQpTcU9rSmt0NmlDcEE0RlhrNFZpa3JsclBVL1k4Q0JMdlVrdzZmcCtZVzV6dFpWUkw0UjBzUXkrRWhGbjYzRGJLDQpkYlRzMHFCZ01waU0vcFBEd1BPYnRtNytGdGh2Sjg3RThUK2gyalJncERocExoajl5WVBBQkt1Q0FqSmN6di9PDQpraGNVbjhoK2srU3NIdnlrK1FiNkMwR1FtRjBUQzA3U25YQThWREtrSGRTRnNMVUxRS01BeFM0RS9NUDJWNHF5DQpTeFNXSGd2Y2Z3RDl6M2NBM2RuT3hlVTNISWovc2RCODJSc0NBd0VBQWFPQ0F0SXdnZ0xPTUIwR0ExVWREZ1FXDQpCQlRmNXVCaEdwL3ptTzNmQ3kwQ0lXaHgva1JlNFRBZkJnTlZIU01FR0RBV2dCVHlLc0M5TmswMU8vR2dQVm1QDQo3L2RGOFBXTk1qQ0NBaU1HQTFVZEh3U0NBaG93Z2dJV01JSUNFcUNDQWc2Z2dnSUtob0htYkdSaGNEb3ZMMnh2DQpaR2xpYkRJd09XSjJiVEF6Tnk1dGMyRmtabk11WTI5dE9qTTRPUzlEVGoxc2IyUnBZbXd5TURsaWRtMHdNemN1DQpiWE5oWkdaekxtTnZiU3hEVGoxc2IyUnBZbXd5TURsaWRtMHdNemNzUTA0OVEwUlFMRU5PUFZCMVlteHBZeVV5DQpNRXRsZVNVeU1GTmxjblpwWTJWekxFTk9QVk5sY25acFkyVnpMRU5PUFVOdmJtWnBaM1Z5WVhScGIyNHNSRU05DQpiWE5oWkdaekxFUkRQV052YlQ5alpYSjBhV1pwWTJGMFpWSmxkbTlqWVhScGIyNU1hWE4wUDJKaGMyVS9iMkpxDQpaV04wUTJ4aGMzTTlZMUpNUkdsemRISnBZblYwYVc5dVVHOXBiblNHZ2VKc1pHRndPaTh2Ykc5a2FXSnNNakE1DQpZblp0TURNM0xtMXpZV1JtY3k1amIyMHZRMDQ5Ykc5a2FXSnNNakE1WW5adE1ETTNMbTF6WVdSbWN5NWpiMjBzDQpRMDQ5Ykc5a2FXSnNNakE1WW5adE1ETTNMRU5PUFVORVVDeERUajFRZFdKc2FXTWxNakJMWlhrbE1qQlRaWEoyDQphV05sY3l4RFRqMVRaWEoyYVdObGN5eERUajFEYjI1bWFXZDFjbUYwYVc5dUxFUkRQVzF6WVdSbWN5eEVRejFqDQpiMjAvWTJWeWRHbG1hV05oZEdWU1pYWnZZMkYwYVc5dVRHbHpkRDlpWVhObFAyOWlhbVZqZEVOc1lYTnpQV05TDQpURVJwYzNSeWFXSjFkR2x2YmxCdmFXNTBoanBvZEhSd09pOHZiRzlrYVdKc01qQTVZblp0TURFNUxtbG9lUzVpDQpjbTloWkdOdmJTNXVaWFF2ZEdWemRHbHVaME5TVEM5amNtd3VZM0pzTUZjR0NDc0dBUVVGQndFQkJFc3dTVEJIDQpCZ2dyQmdFRkJRY3dBb1k3Wm1sc1pUb3ZMeTh2YVdKdWNXRXdNREV4TmpndlEyVnlkRVZ1Y205c2JDOXBZbTV4DQpZVEF3TVRFMk9GOUNjR05RY21GdGIyUkRRUzVqY25Rd0RBWURWUjBUQVFIL0JBSXdBREFOQmdrcWhraUc5dzBCDQpBUXNGQUFPQ0FnRUFYYXowZVY3SDVpdFdyb09WRU1jdFpQSXA4b244TG1jUGlGb0NxMHRkVlhSdWQzVlhNelBEDQpKQ1FwcGxOTlJjYlB1Z2tTV29EMzFmc01iSHRvV1U1OExFQzdiR3ZoV2ZQUEJKM2J5ZFhnVUtoN1dXclFpaUVrDQpmK2Rmdmp3THRvS0h3OS9MRnRpR0lML0x5dmxodmV1OVpud1FHVm15eE1TZlljN1ZFUXA1TGZhRnZ6ZlEwZ0J6DQpZWUZxcEV3VTYra3lFcGhiZStFOUVKSnNLRFZ2ZEpFbmJWOGFWUmhVUDNnVU1XN2xIOHhlUkRLcFZzNVlsQWwvDQpLS1E5b1pPNGJKQ2NZQ2N5cHlTa0VNZm00RTlPSitGM1FoZ2lLSTlkUnZwK0h2UFcvelI4ODhtemE5NTNUSkRjDQo2cGhKMnY5VXIvSFRaUFk1OVhFZ2pRTk9WR1NSendvRFJzbTdHNTdZSEtUZ3hEY0gzTXhCdGxXMEFlRUR0dWlJDQo3SGpDZlhudEhRNWxXREI5NmJwOFRjTlFWeFo1Wnh2R0NQTjJuUFozR1RHWGlCWUFheUR3TEU3clV3aUExdXUwDQpXb25lcGxLc1FnaUFSQTUzT2YrL3R5TklNb2VWcDJQU2JnNmxlcUtmM1ZTZ3JhbkJ1c1VaV3NpU29XNUh1eFFiDQpqTFlTWUV0SzcyMHFsQ3ZTaC9kVzhsTEpjLzdoZUliY0tVZGxRaXhQZ0x2amtsTjlMWFpGQVJEa3NSSW93VVFRDQp6MFpBU3ZCcXdRRTZ6MnhiMGxXOTdRcUlwQTlpU2tITkRlRWVhVW9lM2sxNXdDaDNNOVJGR2l0QWt0WnhjV25FDQpabEZUeDRhRmxpQUIxNUFBeHZLbWErb0lLWkI5eTJzVVFFK091a1d1VVp4V3I5YmRLdHV0RDhRPQ0KLS0tLS1FTkQgQ0VSVElGSUNBVEUtLS0tLQ0K"
-      tlsKey: "LS0tLS1CRUdJTiBQUklWQVRFIEtFWS0tLS0tDQpNSUlFdmdJQkFEQU5CZ2txaGtpRzl3MEJBUUVGQUFTQ0JLZ3dnZ1NrQWdFQUFvSUJBUUR0NzBya1dJelhueGR2DQpLV2dBS2tvalhVZEpjM3hNRG5tcDZnQm9oWlZtZFJvL0lmZTFHZTFqUXZBdFV4TjUyL3pQeTUvSmZzOUFrUTVJDQpoYmt3WWk1Tkd4ZkJVTjljcVA1aFJoODltaDdLYUY0S2VpV1p1VXFqcENaTGVvZ3FRT0JWNU9GWXBLNWF6MVAyDQpQQWdTNzFKTU9uNmZtRnVjN1dWVVMrRWRMRU12aElSWit0dzJ5blcwN05LZ1lES1lqUDZUdzhEem03WnUvaGJZDQpieWZPeFBFL29kbzBZS1E0YVM0WS9jbUR3QVNyZ2dJeVhNNy96cElYRkovSWZwUGtyQjc4cFBrRytndEJrSmhkDQpFd3RPMHAxd1BGUXlwQjNVaGJDMUMwQ2pBTVV1QlB6RDlsZUtza3NVbGg0TDNIOEEvYzkzQU4zWnpzWGxOeHlJDQovN0hRZk5rYkFnTUJBQUVDZ2dFQkFPaG55ZEZOSlJVZ0VuWEVEZy9MUHV0WUcxK0ZiQzJtSGZSMzJybzljUGJJDQovMEFYWDZzSGpqWmNsZGpQd3NCT3Zwd0JteXZucjJ5end5M1hZRklBTkpXZ0Z3MytmbzQxaTNOY1dQdUU1UHAwDQpBeGRjeEFscFVaeVJvODRwKzRLNkorWCtVSmFURkxNaXZESlI1TmtKNW1zSzM4L25zK1NPaFdGWFZLVjRMSS9sDQprRjhBUW5VdERnb3FxYjVPQUtGSHk0dm9uMi9SemNSZ1hscEFVVlBFeUMwazJRNUVyQjBOcnhtL2orMTlVZDIzDQpzdjlCbENLWUhDbnRkUThEU3ozUXBiU2F1THdRMTVLU0JPZVhYSEprMUFnTXRRRFk1MTRkZ1Q1V1BRWTRGOCtiDQpVWmlvTE00Kzc1VDhOT3ZLbllySWJJNzNNRUdaKy9XdUY5NTd4eTNyRDdFQ2dZRUErNDdlU3d3SkN5NEIwYmh2DQp2bWkzaGtlbEtodEJxaEI4VmVyZkpWZkdPcDlrVGpRaFM1SUdrR0gzVERmSlNJN0FpUlZIVW9ZbTFSTVQ2R3BTDQpIOVkvNHVEQW9lOTBSWmM0OHo3dnJRL2VVd1lOUnNOclJXakV2TS9Cb0RKbE8xOE4zcFZCNm1PUDhUcW5ZWGtEDQpMc2RFUTVPeW1iWFN5aG5hWTY0ZjZBSWpCWjBDZ1lFQThpTFhoVFF5QnREaUM3MWhzSGozMmVDTzcyNlYveklCDQpDT3o5OG4vK0dRVk5YZHJHMTliVzVONmhTZk9tYjFsV0UrWmhzQ0NSMmlNWi9KOXlLa0tTWTJ4Z2EzRzhpNndrDQp3eUR6MVpyVE4xbjM2SWhGMzZuSzY4MVRzT29ZdGZmT3oxWDJDOUlLdFhhczFOY2ZzVkdUWWFUQ3F2YUJXeXpEDQp3ZUg0VkFxQk9CY0NnWUJjY3J2bERxNUFLbzlHbUthUWJvR0wyc2FyTzhzZENlUDMyMUpZc2ZKSzF3c1E1bjJaDQovVGRtVm1xQTJ6dWc2NzE4WTVLTGxIdXU4TXp2TEN1MFFaUEcrRnd5NXdKdkZNMDhMOVA3WVFxT3JubXdtTjdTDQphbGRySUZzRFdhSDBlTkZyREtWbDAyTXgveUZHWkNlMFNFMGhIS1dWY2NuZXRqT1pVSU92U3lHOXpRS0JnQkVODQpBUTVCUWJDWEx3UFNuemwxRzBiOWVETkdIMHZzTW9SMVkrQ2F3TUwwUzZGclVZdExkckNCT094ak92b21XVmhuDQpaY09vVjN6NzhjMkhVTnZHK2xZRUFMb3dOUzNFdm9YN0lSQ09xWWNCVCtMUkRkS1ZPMVBsanBvcnNmZkdib3JODQpLOWxqUGh2UE1wWitXNTM1OTUzdG8wTzB2aUUwZ3NoNWFDcEszeFNiQW9HQkFLd25wdmY3dUU3UEQyaUFaK3V6DQphZjVWaFB3ajFRS3FWQkJGU3p6Um1zT2ZUQWdKamFiYVlocVZ0MW1aT0NUQUR4SmE0cm5yMktkNDZreFR6THg5DQpUbEtGTnY5VTYxTVZHWmU2TW9YM1lDT2d1Q2ZBcDVIN2N2Z1FmbFVPejBmZHozMkViVFVlVVdJQXRJb1B6a2JoDQpZY3FmL3VOLzNxNThHMGMzT1pJT1hrZVQNCi0tLS0tRU5EIFBSSVZBVEUgS0VZLS0tLS0="
-
-# Custom metrics configuration #
-    ag:
-      metricsExporter:
-        enabled: false
-
-        serviceMonitor:
-          enabled: true                       
-# Resource configuration #
-      resources:
-        requests:
-          cpu: 400m
-          memory: 500Mi
-        #limits:
-        #  cpu:
-        #  memory:
-
-# Autoscaling configuration #
-    pod:
-      autoscaling:
-        enabled: false
-        type: "both"
-        replicasMin: 1
-        replicasMax: 4
-        cpuUtilization: 80
-        customMetrics:
-          metricName: "apache_request_rate"
-          targetAverageValue: 20
-
-# Authentication authorization web services configuration #
-    authaz:
-      enabled: false
-      acoName: ""
-      hostName: ""
-      log:
-        enabled: false
-
-# Federation gateway configuration #
-    federationGateway:
+    # enable agent key generation capability for ADMIN POD
+    agentKeyGeneration:
       enabled: true
-      trace: 
+    keyUpdate:
+      enabled: true
+
+  adminUI:
+
+    # Administrative UI docker image repository details.
+    repository: siteminder.packages.broadcom.com/casso
+    image: admin-ui
+    tag: 12.8.0801.3037
+    
+    resources:
+      requests:
+        cpu: 500m
+        memory: 1Gi
+      #limits:
+      #  cpu:
+      #  memory:
+
+    # Define max time allowed for Administration UI registration with Policy Server.
+    regMaxTimeoutSeconds: 300
+
+    # To check for Liveness and Readiness of Administrative UI.
+    livenessProbe:
+      initialDelaySeconds: 180
+      timeoutSeconds: 5
+      periodSeconds: 5
+      failureThreshold: 6
+    readinessProbe:
+      initialDelaySeconds: 40
+      timeoutSeconds: 3
+      periodSeconds: 5
+      failureThreshold: 6
+
+    # Custom header name that contains clientIP
+    customClientIPHeader: "x-forwarded-for"
+
+
+    # Enable either the external authentication for Administrative UI feature or the Agent protection with external authentication feature. Do not enable both the features simultaneously.
+    # Enable the external authentication for Administrative UI feature only once a SiteMinder administrator is created from Administrative UI after connecting to an external user directory.
+    # Enable the Agent protection with external authentication feature only when Administrative UI is protected with an Agent and an external administrator store is used to log into Administrative UI. 
+    # See the product documentation for more details.
+
+    Auth:
+      externalAuth:
         enabled: false
+      protectWithAgent:
+        enabled: false
+      type: "odbc"
+      importFile: ""
+      odbc:
+        dataSourceName: "smadministrators"
+        odbcType: ""
+        serverName: ""
+        serverPort: ""
+        databaseName: ""
+        username: ""
+        userPassword: ""
+      ldap:
+        userPassword: ""
 
-# Foward Proxy Configuration. SiteMinder as an OAuth client can communicate with public OpenID Connect Providers through a forward proxy server, via backchannel communication.
-# If this enabled, the below  properties gets updated in the SSLCipherConfig.properties.
-# Supported values for cryptoAlgorithm are 'AES128_CBC_PKCS5PADDING' and 'AES256_CBC_PKCS5PADDING'. If not provided, 'AES128_CBC_PKCS5PADDING' will be considered as default
-# Supported values for digestAlgorithm are 'HMAC_SHA1' , 'HMAC_SHA256' and 'PBE_HMAC_SHA256_P12'. If not provided, 'HMAC_SHA1' will be considered as default
-    enableForwardProxy: false
-    forwardProxyConfig:
-      proxyHost: ""
-      proxyPort: ""
-      proxyUser: ""
-      cryptoAlgorithm: ""
-      digestAlgorithm: ""
-      proxyPassword: ""
+    # To use custom provided key store to enable HTTPS for Administration UI, set "enabled" to true.
+    # Alias name must be same as the value used in key store (JKS) file.
+    # This key is to provide password for Administrative UI key store (custom certificates), used for HTTPS. Default value is tomcat.
+    customKeyStore:
+      enabled: false
+      password: "" 
+      aliasKey: "tomcat"  
 
+  # className is based on the Ingress class that is being deployed. Default value is nginx.
+  ingress:
+    className: "nginx"
+    hostName: casso.ca.local
+    servicePort: 8443
+    tlsSecret: siteminder-adminui-tls
+    tlsCrt: "LS0tLS1CRUdJTiBDRVJUSUZJQ0FURS0tLS0tCk1JSURCVENDQWUyZ0F3SUJBZ0lKQUpiYi9TLyt1UmcyTUEwR0NTcUdTSWIzRFFFQkN3VUFNQmt4RnpBVkJnTlYKQkFNTURtTmhjM052TG1OaExteHZZMkZzTUI0WERURTVNVEF3TXpFek16Y3pNVm9YRFRJNU1Ea3pNREV6TXpjegpNVm93R1RFWE1CVUdBMVVFQXd3T1kyRnpjMjh1WTJFdWJHOWpZV3d3Z2dFaU1BMEdDU3FHU0liM0RRRUJBUVVBCkE0SUJEd0F3Z2dFS0FvSUJBUUM4SzJYT0VkeHdKbklCOEJFSnBRNmZ2YnhlN01PZ1FJNkJLT09HdzFvdlB1N1AKTWJNdEhSaVIybXJocFIvRHFHekVNMDgrSnZnNmRtWCsxRktlV200UzhUZ0dTekVmRjg5Z21LaFRTdXFGK0lvawp3YzA3YnYwNUJQclAyTE9FTlJZUFdhTlh0dldLQWgwSGtNQnh4ck1qZnNCVExlckhCcnVMRDRneTd2VFk4NW9CClNZWVY5YnB1c2hFbmhCdVQwdUFLVXpDNW1NdTBibnkyZmZQdHdCR2ZlNTg0NHFNMXBaSnUzN0NhaUdDbzV0RFUKU1EzTGxSWG9DN0NEbEZtb3JFRC9Zd0V0VndjRFp4S3YzdkJUa0MzeXlhK1EzNi9oaE9uYzM0cmFCd0RIQjdmeApSaHAzbTJqd1gvZGJwSE1aR1AyL09rb3JGVzJBN1NLbHhBSHh6OEJqQWdNQkFBR2pVREJPTUIwR0ExVWREZ1FXCkJCUmFnS1Y0UU9WNHliamR6b0tkTjRJS0JtNmZmVEFmQmdOVkhTTUVHREFXZ0JSYWdLVjRRT1Y0eWJqZHpvS2QKTjRJS0JtNmZmVEFNQmdOVkhSTUVCVEFEQVFIL01BMEdDU3FHU0liM0RRRUJDd1VBQTRJQkFRQVZGMzVOMk8vKwpVS0ZBU3VEUEpiS01PZlo3eFhWTzZnQW1kSVA1dzdDOHJZYU1Ha1FZVEhGa011YjdEKzZCOGJuWWVuSkNSWXZMCklUQ2sxTlEwYzFScVA1blJwWFlrOGt5RUpxOVZJb25wb0VtWEZ1a050TFVTbEhqcFlaVlNzZTVIRDFmMnJDUUEKTWZwSzhsTTJ2NS9RMVVkclYrcFkzaDZNaC8zUWRQcTYxbGdBMFZiY0drR09iRWxEK05JRkxZbzJ3elQ2S2JzUAprS2pmTm1oY2d1ZFVqWVZobU44TnQ0NmRXWTlNWjhqUTBuWVRnSkh6OG5TOUpKT2E3K1pZUWgxMisvanJzNDVhCkpxdE9mUzFLU2ZzdldYOGZXYzNTcmw4bXozc2NabXF2amZ3eE56YTBxc0YrTjB2dDZmRlljczl4U3JIYnVvWjIKWVBsQlo0UGNSTVpSCi0tLS0tRU5EIENFUlRJRklDQVRFLS0tLS0="
+    tlsKey: "LS0tLS1CRUdJTiBQUklWQVRFIEtFWS0tLS0tCk1JSUV2Z0lCQURBTkJna3Foa2lHOXcwQkFRRUZBQVNDQktnd2dnU2tBZ0VBQW9JQkFRQzhLMlhPRWR4d0puSUIKOEJFSnBRNmZ2YnhlN01PZ1FJNkJLT09HdzFvdlB1N1BNYk10SFJpUjJtcmhwUi9EcUd6RU0wOCtKdmc2ZG1YKwoxRktlV200UzhUZ0dTekVmRjg5Z21LaFRTdXFGK0lva3djMDdidjA1QlByUDJMT0VOUllQV2FOWHR2V0tBaDBICmtNQnh4ck1qZnNCVExlckhCcnVMRDRneTd2VFk4NW9CU1lZVjlicHVzaEVuaEJ1VDB1QUtVekM1bU11MGJueTIKZmZQdHdCR2ZlNTg0NHFNMXBaSnUzN0NhaUdDbzV0RFVTUTNMbFJYb0M3Q0RsRm1vckVEL1l3RXRWd2NEWnhLdgozdkJUa0MzeXlhK1EzNi9oaE9uYzM0cmFCd0RIQjdmeFJocDNtMmp3WC9kYnBITVpHUDIvT2tvckZXMkE3U0tsCnhBSHh6OEJqQWdNQkFBRUNnZ0VBYVVjeWwxL2c0Skp4K09tUzdyMTllQnhVMXh0S3ZFOUNLN3R2eVVkbEhzZnMKSHRwa3NCbjJWQ3hLM21KZmFqM0NWT2VNTDI3b05QVm5UWE1Ib25kZjNKTS9VQzRqbG96Z3h0L0NWWSsxdFMwQQpSVjUwOEFyQi9IUHZ5L2duUUJIZmZNa2ZIWVZNeldFdlVydEhJS0VXT3diQW5na3pzUlR3T3ZaK3NsaUZmeGVlCkEyOWs4MlFGU1FodXNBbmJKZklnUjBrRTdIcXJDbWk1WCs1dEtTVTlrSWdpQlUzMG16U1poL2lHYjhyS3RSeTAKdFgxQytlaTlBSDNsb0Vmc2VmOWhWWkpzKzV2UTdYS3h2eU4wTXdtYlVDZVZXdFp5NWJGS2VXenBpNnhkRUk2WQpvT3BqK2VadllWQU1WVWFocGZJSnhCd2UzYlBtY09VQVdoSkJ2ZkdQdVFLQmdRRHBjMytycUJCVnFGYlR0QStCCjVyRXcwelNyQTBpaFpTUGxCOWRzUHQ4cHhCV2F1dHVTSVN5dG9sT1YrRGRUSUNnY1hmbkRaTVQxcmNrc0pOQnEKUmROQkhQM3k2RjE2SS9XZTY0Zk8zNUdJL1VabU14RlZIN1laRmZVSmxXSDhSVjgzbWppTlJ4OHVJc1VyWXdCZgo1dXRibEFLZFkvSVVuUjc0RzZvd1lCY2h6UUtCZ1FET1dEcUZxSWR2ZWp4K2pYVnVDT1FQMk02L1VLejB4ZW04CmMxZUdHZXVGSFp2TkZzbmZUSWI5NHpCUDQzOG1ZRHZoenFuK2pQYWFXNWt4MmdEak5CbE1sOTIrMW5nUUcyWHMKaWR3YVVrRFVOcFZoTnBIcVVtZmF2Q2VLSnQ0NGtDQjBISVpXTFpsVDQrM28rS0NRVGhZbUcrWjZMcTNiZFFRSgpJWm5HU1FuNjd3S0JnUURqbS9tWlNuWUtuZU54NnpmSFpqM1NKY3BQQmhlVlRFQVArSEkvbHBrTVpxTE54bXQzCjhTSlhkRkhjZ1RLbnVFMkRRdGpXZWZSU3VJclFvR0FYalZhb1FIVVVsUnMyajhMVm5EeEFKZGdHWVRKM1NFa1kKM3A4em5DWFpueXoyd2toUXRPdDRTeVNLWGRveE1BaFllSk4yS1R2WGFtL0hTMTI3ZDNXYVRzV2U3UUtCZ1FDdQoxWkRZZVFBd1UyajRiWkZuSno5ZHNmMFRteDdBMHdTRnVWRWFmZEhSMjFHTWgxZUt6VU8vMFFTNVcrLzdLeVR4CjRmS2xqUGpSdHZUcGlXYWhIQjZuaURISnBkemJBT3Z1Ykt6QzNKaXpkb0JCZTBSTlAzOWhsWFVIR0lISGVVOFcKTXFrY1VjeU5pUjJtL1NyR3VuTUgzVEgrcXBpQ3p2WVphby9wc3k4eW53S0JnSHNGY1UzKzVMZHRFV040c2lhNwoyazFLQkV4YnhrSTFiK1ZYUjcrZ2lBcTBOaFJqYWRLM29TYnQ3OEN3bnh3ZnBIU2VOVjY2VTl4NG9hTVQvcnIrCkJRUHBNeGMrY2JaeUNHbzZZYXNTWFZWdVVHazdHTDgra1k0ai95bzhBMC9yc0ZKaDd0U0dzNFh0L1IzelUzekIKK1B5WDhPR0gxMnZYZlFaKzFKblN0RDhoCi0tLS0tRU5EIFBSSVZBVEUgS0VZLS0tLS0K"
 
-# SiteMinder admin credentials #
-    regSecret:
-      name: "regadmincreds"
-  adminUsername: ""
-  adminPassword: ""
+  # Config retriever details for Administrative Server #
+  configuration:
+    source: "/tmp/democonfiguration/admin"
+    gitFolderPath: "/admin"
+  runtimeConfiguration:
+    source: ""
+    enabled: false
+    runtimeGitFolderPath: "/admin"
+
+# Options specified under maintenance tag are applicable only for Maintenance charts.
+maintenance:
+ enabled: false 
+ operation:
+    name: "XPSExport"
+    args: "test.xml -xb -npass" 
+    input_file: ""
+ job:
+  restartPolicy: Never
+  backOffLimit: 1
   
 additionalLabels: {}
 
