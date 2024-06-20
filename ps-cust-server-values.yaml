@@ -1,0 +1,55 @@
+admin:
+  enabled: true
+global:
+  acceptLicenseAgreement: "YES"
+  encryptionKey: OTZOK3B5eGFtRkhoeEIxQ0hNT2xUZE5zVmlyZnpaUFRxeXhObDQzRHM5azN4NDVMdENYdVRtanlvbGhsNkdGZQ==
+  masterKeySeed: c2Ftc3BvYw==
+  fipsMode: ONLY
+  fullname: casso
+  imagePullPolicy: IfNotPresent
+  policyServerParams:
+    admin:
+      service:
+        type: ClusterIP
+    service:
+      type: LoadBalancer
+    smTrace:
+      enabled: true
+    startPSMon: "true"
+  policyStore:
+    odbc:
+      user: admin
+    ldap:
+      # This section is for ldap policy store type. The ldap type can be "cadir" or "ADLDS".
+      type: "cadir"
+      rootDN: "o=policystore,c=ca"
+      userDN: "cn=admin,ou=users,o=policystore,c=ca"
+      # To enable SSL in ldap policy store, set "enabled" to "true".
+      ssl:
+        enabled: false
+    service: 10.1.23.172:40389
+    type: ldap
+    userPassword: S05iTGF5RDhOakJBQlFVTlhCV0xzYnBkWEM3YXdoMFl5VXA0WGxnWEFaQ0RYY0pSOUNScHJ6b2VkYjFyMTVERA==
+  stores:
+    keyStore:
+      embedded: "YES"
+  superuserPassword: OTZOK3B5eGFtRkhoeEIxQ0hNT2xUZE5zVmlyZnpaUFRxeXhObDQzRHM5azN4NDVMdENYdVRtanlvbGhsNkdGZQ==
+policyServer:
+  annotations:
+    values: {prometheus.io/scrape: 'true', prometheus.io/port: '8088', prometheus.io/path: '/metricsexporter/resources/metrics'}
+  aps:
+    enabled: false
+  autoscaling:
+    averageRequestQueueInUse: 15
+    cpuUtilization: 70
+    enabled: true
+    replicasMax: 2
+    replicasMin: 1
+    type: "both"
+  enableRadiusServer: false
+  enableSymantecAdvancedAuthenticationIntegration: false
+  enabled: true
+  replicas: 1
+  serviceNodePort:
+    psHealthProbe: 31333
+
